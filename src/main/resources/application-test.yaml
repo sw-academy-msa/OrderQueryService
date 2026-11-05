@@ -1,0 +1,11 @@
+# 실제 .env와 개발 DB를 읽지 않으며 테스트가 격리 PostgreSQL 주소를 주입합니다.
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+eureka:
+  client:
+    enabled: false
+query:
+  events:
+    enabled: false

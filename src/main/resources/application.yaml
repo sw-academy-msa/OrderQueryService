@@ -1,0 +1,87 @@
+# 주문 조회 데이터만 소유하고 Kafka 명령 발행이나 Saga 실행은 하지 않습니다.
+spring:
+  application:
+    name: order-query-service
+  profiles:
+    default: local
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        default_schema: orders_query
+        jdbc:
+          time_zone: UTC
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:19092}
+    consumer:
+      group-id: ${ORDER_QUERY_CONSUMER_GROUP:order-query-v1}
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
+      properties:
+        allow.auto.create.topics: false
+        max.partition.fetch.bytes: 4194304
+    producer:
+      # 영구 오류 DLT 발행 전용이며 업무 명령은 발행하지 않습니다.
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.ByteArraySerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.request.size: 5242880
+        max.block.ms: 2000
+        delivery.timeout.ms: 8000
+        request.timeout.ms: 3000
+    listener:
+      ack-mode: record
+      auto-startup: ${ORDER_QUERY_EVENTS_ENABLED:false}
+    admin:
+      auto-create: false
+server:
+  port: ${SERVER_PORT:8085}
+  shutdown: graceful
+  forward-headers-strategy: none
+query:
+  events:
+    enabled: ${ORDER_QUERY_EVENTS_ENABLED:false}
+    order-topic: stockdrop.orders.private.v1
+    inquiry-topic: stockdrop.orders.inquiries.private.v1
+  auth:
+    issuer: ${JWT_ISSUER:http://localhost:8080}
+    audience: ${JWT_AUDIENCE:stockdrop-api}
+    jwk-set-uri: ${ACCOUNT_JWKS_URI:http://localhost:8080/.well-known/jwks.json}
+eureka:
+  client:
+    enabled: ${EUREKA_CLIENT_ENABLED:true}
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}
+    healthcheck:
+      enabled: true
+  instance:
+    hostname: ${SERVICE_HOSTNAME:localhost}
+    instance-id: ${spring.application.name}:${SERVICE_INSTANCE_ID:${random.uuid}}
+    non-secure-port: ${SERVICE_PORT:${server.port}}
+    health-check-url-path: /actuator/health
+    status-page-url-path: /actuator/health
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+logging:
+  level:
+    # SQL 오류나 Kafka 복구 로그에 비공개 배송지·문의 본문이 포함되지 않도록 원문 출력을 차단합니다.
+    org.hibernate.engine.jdbc.spi.SqlExceptionHelper: 'OFF'
+    org.springframework.kafka.listener.DefaultErrorHandler: 'OFF'
+    org.springframework.kafka.listener.DeadLetterPublishingRecoverer: 'OFF'

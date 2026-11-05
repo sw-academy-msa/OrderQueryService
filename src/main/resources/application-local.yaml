@@ -1,0 +1,18 @@
+# 기존 일반 PostgreSQL에 전용 논리 DB·계정·스키마를 준비한 후 실행합니다.
+spring:
+  config:
+    import: optional:file:./.env[.properties]
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/orders_query}
+    username: ${DB_USERNAME:orders_query}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 5
+  jpa:
+    hibernate:
+      ddl-auto: update
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
