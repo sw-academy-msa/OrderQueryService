@@ -24,3 +24,7 @@ Query는 최신 원본을 보장하지 않습니다. 결제 성공 여부는 Ord
 - [실제 컨트롤러 OpenAPI](openapi/order-query.openapi.json)
 
 개발 ddl-auto=update, 운영은 별도 스키마 준비 후 validate입니다. 실제 AWS/RDS 변경이나 ARM64 이미지 검증은 수행한 것으로 간주하지 않습니다. 운영 OpenAPI Gateway 주소는 `query.openapi.gateway-base-url`로 주입합니다. `.env`는 local에서만 읽으며 Git add/commit/push는 사용자가 수행합니다. README와 계약은 추적 대상으로 두고 상세 docs와 AGENTS.md는 기존 Query 프로젝트처럼 로컬 관리합니다.
+
+## 상품별 주문 관리와 전체 문의함
+
+기존 구매자·판매자 주문 목록에 productId 필터를 제공합니다. 판매자 summary는 확정 주문·옵션 수량·배송 상태를 집계하고, 양쪽 inquiries 경로는 전체 본인 주문의 문의를 모아 보여줍니다. unansweredOnly=true는 마지막 구매자 메시지에 아직 판매자 답변이 없는 문의입니다. [API와 집계 기준](contracts/order-query-management.md)을 확인합니다. 자기 Query 모델만 사용하며 새 Kafka 이벤트나 원본 DB 접근을 추가하지 않습니다.
