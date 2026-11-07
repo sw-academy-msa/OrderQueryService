@@ -14,4 +14,11 @@ public interface OrderQueryService {
     Page<Inquiry> inquiries(UUID actor, boolean seller, UUID orderId, PageRequest request);
 
     Inquiry inquiry(UUID actor, boolean seller, UUID orderId, UUID inquiryId);
+
+    /** 계정별 전체 주문 문의함이며 주문당 문의 상세는 기존 계약을 유지합니다. */
+    Page<com.msa.orderquery.domain.order.query.dto.response.InquiryInboxItemResponse> inbox(
+            UUID actor, boolean seller, InquiryInboxRequest request);
+
+    com.msa.orderquery.domain.order.query.dto.response.SellerOrderSummaryResponse sellerSummary(
+            UUID seller, SellerSummaryRequest request);
 }

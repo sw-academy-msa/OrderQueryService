@@ -14,7 +14,20 @@ public record OrderSearchRequest(
         Instant createdFrom,
         Instant createdTo,
         @PositiveOrZero Integer page,
-        @Min(1) @Max(100) Integer size) {
+        @Min(1) @Max(100) Integer size,
+        java.util.UUID productId) {
+    /** 기존 호출은 모든 상품을 대상으로 합니다. */
+    public OrderSearchRequest(
+            String keyword,
+            OrderState state,
+            DeliveryState delivery,
+            Instant createdFrom,
+            Instant createdTo,
+            Integer page,
+            Integer size) {
+        this(keyword, state, delivery, createdFrom, createdTo, page, size, null);
+    }
+
     public OrderSearchRequest {
         page = page == null ? 0 : page;
         size = size == null ? 20 : size;

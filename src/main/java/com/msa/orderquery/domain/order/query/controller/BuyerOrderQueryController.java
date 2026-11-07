@@ -34,6 +34,19 @@ public class BuyerOrderQueryController {
         return ApiResponse.onSuccess(response, SuccessCode.OK);
     }
 
+    /** 여러 주문의 문의 카드만 반환하며 작성·답변은 Command API를 사용합니다. */
+    @GetMapping("/inquiries")
+    public ApiResponse<
+                    Page<
+                            com.msa.orderquery.domain.order.query.dto.response
+                                    .InquiryInboxItemResponse>>
+            inbox(
+                    @AuthenticationPrincipal Jwt jwt,
+                    @Valid @ParameterObject @ModelAttribute InquiryInboxRequest request) {
+        var response = service.inbox(UUID.fromString(jwt.getSubject()), false, request);
+        return ApiResponse.onSuccess(response, SuccessCode.OK);
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<Detail> detail(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         Detail response = service.detail(UUID.fromString(jwt.getSubject()), false, id);

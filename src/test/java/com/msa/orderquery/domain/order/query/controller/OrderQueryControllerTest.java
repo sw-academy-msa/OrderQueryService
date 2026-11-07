@@ -221,7 +221,7 @@ class OrderQueryControllerTest extends QueryDatabaseTestSupport {
         Files.createDirectories(path.getParent());
         Files.writeString(path, generated, StandardCharsets.UTF_8);
         var tree = mapper.readTree(generated);
-        assertThat(tree.path("paths").size()).isEqualTo(8);
+        assertThat(tree.path("paths").size()).isEqualTo(11);
         assertThat(tree)
                 .isEqualTo(
                         mapper.readTree(

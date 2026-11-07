@@ -1,8 +1,12 @@
 package com.msa.orderquery.domain.order.query.service.impl;
 
 import com.msa.orderquery.domain.order.exception.*;
+import com.msa.orderquery.domain.order.query.dto.request.InquiryInboxRequest;
 import com.msa.orderquery.domain.order.query.dto.request.OrderSearchRequest;
+import com.msa.orderquery.domain.order.query.dto.request.SellerSummaryRequest;
+import com.msa.orderquery.domain.order.query.dto.response.InquiryInboxItemResponse;
 import com.msa.orderquery.domain.order.query.dto.response.OrderResponses.*;
+import com.msa.orderquery.domain.order.query.dto.response.SellerOrderSummaryResponse;
 import com.msa.orderquery.domain.order.query.service.OrderQueryService;
 import com.msa.orderquery.domain.projection.entity.*;
 import com.msa.orderquery.domain.projection.event.*;
@@ -57,6 +61,7 @@ public class OrderQueryServiceImpl implements OrderQueryService {
                 orders.search(
                         actor,
                         seller,
+                        request.productId(),
                         request.state(),
                         request.delivery(),
                         request.createdFrom(),
@@ -115,6 +120,57 @@ public class OrderQueryServiceImpl implements OrderQueryService {
                 inquiries
                         .forOrder(inquiryId, orderId, row.buyerId, row.sellerId)
                         .orElseThrow(this::notFound));
+    }
+
+    /** 페이지 검증은 공통 로직을 재사용하고 native 문의함 정렬은 저장소에 고정합니다. */
+    public Page<InquiryInboxItemResponse> inbox(
+            UUID actor, boolean seller, InquiryInboxRequest request) {
+        var validated = paging(request.page(), request.size());
+        var result =
+                inquiries.inbox(
+                        actor,
+                        seller,
+                        request.productId(),
+                        request.unansweredOnly(),
+                        PageRequest.of(validated.getPageNumber(), validated.getPageSize()));
+        return page(
+                result.map(
+                        r ->
+                                InquiryInboxItemResponse.builder()
+                                        .id(r.getId())
+                                        .orderId(r.getOrderId())
+                                        .productId(r.getProductId())
+                                        .productName(r.getProductName())
+                                        .category(r.getCategory())
+                                        .lastMessage(r.getLastMessage())
+                                        .lastMessageAt(
+                                                java.time.OffsetDateTime.parse(r.getLastMessageAt())
+                                                        .toInstant())
+                                        .awaitingSeller(Boolean.TRUE.equals(r.getAwaitingSeller()))
+                                        .createdAt(r.getCreatedAt())
+                                        .sourceVersion(r.getSourceVersion())
+                                        .sourceOccurredAt(r.getSourceOccurredAt())
+                                        .projectedAt(r.getProjectedAt())
+                                        .build()));
+    }
+
+    /** 한 SQL의 동일 스냅샷으로 확정 주문·배송 상태·수량을 함께 집계합니다. */
+    public SellerOrderSummaryResponse sellerSummary(UUID seller, SellerSummaryRequest request) {
+        if (request.createdFrom() != null
+                && request.createdTo() != null
+                && !request.createdFrom().isBefore(request.createdTo())) invalid();
+        var r =
+                orders.sellerSummary(
+                        seller, request.productId(), request.createdFrom(), request.createdTo());
+        return SellerOrderSummaryResponse.builder()
+                .totalOrders(r.getTotalOrders())
+                .confirmedOrders(r.getConfirmedOrders())
+                .preparingOrders(r.getPreparingOrders())
+                .shippingOrders(r.getShippingOrders())
+                .deliveredOrders(r.getDeliveredOrders())
+                .confirmedQuantity(r.getConfirmedQuantity())
+                .approximate(true)
+                .build();
     }
 
     private OrderProjection owned(UUID actor, boolean seller, UUID orderId) {
