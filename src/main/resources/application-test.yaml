@@ -1,5 +1,8 @@
 # 실제 .env와 개발 DB를 읽지 않으며 테스트가 격리 PostgreSQL 주소를 주입합니다.
 spring:
+  # 일반 테스트는 Hibernate로 테이블을 만들고, Flyway SQL은 FlywayMigrationTest가 따로 검증합니다.
+  flyway:
+    enabled: false
   jpa:
     hibernate:
       ddl-auto: create-drop
