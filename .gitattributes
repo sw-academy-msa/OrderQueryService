@@ -1,0 +1,6 @@
+# Linux 컨테이너와 Windows 개발 환경의 실행 스크립트 줄바꿈을 구분합니다.
+* text=auto
+gradlew text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf

@@ -1,0 +1,26 @@
+# 앱만 실행하며 일반 DB·Command DB·Kafka를 새로 생성하지 않습니다.
+name: stockdrop-order-query
+services:
+  order-query:
+    build: .
+    env_file: .env
+    # Linux 호스트 서비스도 Docker 브리지에서 접속 가능한 주소에 바인딩해야 합니다.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      DB_URL: jdbc:postgresql://host.docker.internal:5433/orders_query
+      ACCOUNT_JWKS_URI: http://host.docker.internal:8080/.well-known/jwks.json
+      EUREKA_DEFAULT_ZONE: http://host.docker.internal:8761/eureka/
+      SERVICE_HOSTNAME: ${SERVICE_HOSTNAME:-localhost}
+      SERVICE_PORT: "8085"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "127.0.0.1:8085:8085"
+    networks:
+      - shared-kafka
+    restart: unless-stopped
+    stop_grace_period: 30s
+networks:
+  shared-kafka:
+    external: true
+    name: stockdrop-query-kafka_default
