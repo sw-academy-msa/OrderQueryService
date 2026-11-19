@@ -87,6 +87,7 @@ public final class OrderResponses {
             String trackingNumber,
             Instant shippedAt,
             Instant deliveredAt,
+            Instant purchaseConfirmedAt,
             long sourceVersion,
             Instant sourceOccurredAt,
             Instant projectedAt) {

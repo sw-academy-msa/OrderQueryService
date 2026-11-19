@@ -58,6 +58,18 @@ public class SellerOrderQueryController {
         return ApiResponse.onSuccess(response, SuccessCode.OK);
     }
 
+    /** 월별 정산 금액(구매 확정 기준, 송금 없음). month 형식 YYYY-MM, 없으면 이번 달(한국 시간) */
+    @GetMapping("/settlement")
+    public ApiResponse<
+                    com.msa.orderquery.domain.order.query.dto.response.SellerSettlementResponse>
+            settlement(
+                    @AuthenticationPrincipal Jwt jwt,
+                    @RequestParam(required = false) java.time.YearMonth month) {
+        var m = month != null ? month : java.time.YearMonth.now(java.time.ZoneId.of("Asia/Seoul"));
+        var response = service.settlement(UUID.fromString(jwt.getSubject()), m);
+        return ApiResponse.onSuccess(response, SuccessCode.OK);
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<Detail> detail(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         Detail response = service.detail(UUID.fromString(jwt.getSubject()), true, id);

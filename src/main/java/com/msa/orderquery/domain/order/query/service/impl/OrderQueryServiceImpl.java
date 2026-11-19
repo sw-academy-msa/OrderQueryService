@@ -7,6 +7,7 @@ import com.msa.orderquery.domain.order.query.dto.request.SellerSummaryRequest;
 import com.msa.orderquery.domain.order.query.dto.response.InquiryInboxItemResponse;
 import com.msa.orderquery.domain.order.query.dto.response.OrderResponses.*;
 import com.msa.orderquery.domain.order.query.dto.response.SellerOrderSummaryResponse;
+import com.msa.orderquery.domain.order.query.dto.response.SellerSettlementResponse;
 import com.msa.orderquery.domain.order.query.service.OrderQueryService;
 import com.msa.orderquery.domain.projection.entity.*;
 import com.msa.orderquery.domain.projection.event.*;
@@ -95,6 +96,7 @@ public class OrderQueryServiceImpl implements OrderQueryService {
                 .trackingNumber(o.trackingNumber())
                 .shippedAt(o.shippedAt())
                 .deliveredAt(o.deliveredAt())
+                .purchaseConfirmedAt(o.purchaseConfirmedAt())
                 .sourceVersion(row.sourceVersion)
                 .sourceOccurredAt(row.sourceOccurredAt)
                 .projectedAt(row.projectedAt)
@@ -171,6 +173,59 @@ public class OrderQueryServiceImpl implements OrderQueryService {
                 .confirmedQuantity(r.getConfirmedQuantity())
                 .approximate(true)
                 .build();
+    }
+
+    /** 배송 완료 주문의 스냅샷으로 월별 구매 확정 금액과 확정 대기 금액을 상품별로 집계합니다. */
+    public SellerSettlementResponse settlement(UUID seller, java.time.YearMonth month) {
+        var zone = java.time.ZoneId.of("Asia/Seoul");
+        var from = month.atDay(1).atStartOfDay(zone).toInstant();
+        var to = month.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant();
+        var byProduct = new LinkedHashMap<UUID, long[]>();
+        var names = new HashMap<UUID, String>();
+        long confirmedOrders = 0, confirmedAmount = 0, awaitingOrders = 0, awaitingAmount = 0;
+        for (var row :
+                orders.findBySellerIdAndStateAndDelivery(
+                        seller, OrderState.CONFIRMED, DeliveryState.DELIVERED)) {
+            var o = mapper.readValue(row.snapshot, OrderSnapshot.class);
+            long amount = Math.max(0, nz(o.totalAmount()) - nz(o.shippingFee()));
+            var at = o.purchaseConfirmedAt();
+            if (at == null) {
+                awaitingOrders++;
+                awaitingAmount += amount;
+                continue;
+            }
+            if (at.isBefore(from) || !at.isBefore(to)) continue;
+            confirmedOrders++;
+            confirmedAmount += amount;
+            var sum = byProduct.computeIfAbsent(o.productId(), k -> new long[3]);
+            sum[0]++;
+            sum[1] += o.items().stream().mapToLong(OrderSnapshot.Item::quantity).sum();
+            sum[2] += amount;
+            names.putIfAbsent(o.productId(), o.productName());
+        }
+        return SellerSettlementResponse.builder()
+                .month(month.toString())
+                .confirmedOrders(confirmedOrders)
+                .confirmedAmount(confirmedAmount)
+                .awaitingOrders(awaitingOrders)
+                .awaitingAmount(awaitingAmount)
+                .products(
+                        byProduct.entrySet().stream()
+                                .map(
+                                        e ->
+                                                SellerSettlementResponse.Product.builder()
+                                                        .productId(e.getKey())
+                                                        .productName(names.get(e.getKey()))
+                                                        .orders(e.getValue()[0])
+                                                        .quantity(e.getValue()[1])
+                                                        .amount(e.getValue()[2])
+                                                        .build())
+                                .toList())
+                .build();
+    }
+
+    private static long nz(Long v) {
+        return v == null ? 0 : v;
     }
 
     private OrderProjection owned(UUID actor, boolean seller, UUID orderId) {
