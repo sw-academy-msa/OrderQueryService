@@ -31,7 +31,9 @@ public record OrderSnapshot(
         @Size(max = 100) String carrier,
         @Size(max = 100) String trackingNumber,
         Instant shippedAt,
-        Instant deliveredAt) {
+        Instant deliveredAt,
+        // 구매 확정 시각(구매자 확정 또는 배송 완료 7일 뒤 자동). 이전 스냅샷에는 없다
+        Instant purchaseConfirmedAt) {
     public OrderSnapshot {
         if (items != null) items = List.copyOf(items);
     }

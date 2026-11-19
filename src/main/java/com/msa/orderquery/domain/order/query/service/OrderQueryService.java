@@ -21,4 +21,8 @@ public interface OrderQueryService {
 
     com.msa.orderquery.domain.order.query.dto.response.SellerOrderSummaryResponse sellerSummary(
             UUID seller, SellerSummaryRequest request);
+
+    /** 월별 정산 금액(구매 확정 기준). 송금하지 않는 조회용입니다. */
+    com.msa.orderquery.domain.order.query.dto.response.SellerSettlementResponse settlement(
+            UUID seller, java.time.YearMonth month);
 }
