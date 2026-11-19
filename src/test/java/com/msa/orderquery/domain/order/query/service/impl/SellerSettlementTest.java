@@ -48,6 +48,13 @@ class SellerSettlementTest {
     }
 
     @Test
+    void snapshotWithoutPurchaseConfirmationSerializesLikeBeforeTheField() {
+        // 이 필드가 생기기 전 이벤트를 다시 받아도 중복 판정 해시가 같아야 한다
+        var json = this.json.writeValueAsString(ProjectionFixtures.order(UUID.randomUUID(), 1).order());
+        assertThat(json).doesNotContain("purchaseConfirmedAt");
+    }
+
+    @Test
     void sumsPurchaseConfirmedAmountInKoreanMonthAndAwaitingSeparately() {
         when(orders.findBySellerIdAndStateAndDelivery(
                         ProjectionFixtures.SELLER, OrderState.CONFIRMED, DeliveryState.DELIVERED))
