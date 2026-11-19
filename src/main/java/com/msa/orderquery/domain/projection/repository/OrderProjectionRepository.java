@@ -12,6 +12,10 @@ import java.util.*;
 
 /** 조회 필터와 소유권 조건을 JPA/JPQL에 함께 적용합니다. 서비스에 SQL을 두지 않습니다. */
 public interface OrderProjectionRepository extends JpaRepository<OrderProjection, UUID> {
+    /** 정산 집계용: 판매자의 결제 확정·배송 완료 주문 */
+    List<OrderProjection> findBySellerIdAndStateAndDelivery(
+            UUID sellerId, OrderState state, DeliveryState delivery);
+
     @Query(
             """
 select o from OrderProjection o
