@@ -28,3 +28,5 @@ Query는 최신 원본을 보장하지 않습니다. 결제 성공 여부는 Ord
 ## 상품별 주문 관리와 전체 문의함
 
 기존 구매자·판매자 주문 목록에 productId 필터를 제공합니다. 판매자 summary는 확정 주문·옵션 수량·배송 상태를 집계하고, 양쪽 inquiries 경로는 전체 본인 주문의 문의를 모아 보여줍니다. unansweredOnly=true는 마지막 구매자 메시지에 아직 판매자 답변이 없는 문의입니다. [API와 집계 기준](contracts/order-query-management.md)을 확인합니다. 자기 Query 모델만 사용하며 새 Kafka 이벤트나 원본 DB 접근을 추가하지 않습니다.
+
+쿠폰 연동은 [상세 문서](docs/coupon-settlement.md)를 따릅니다.

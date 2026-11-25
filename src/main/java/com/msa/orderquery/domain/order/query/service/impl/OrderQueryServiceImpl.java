@@ -87,6 +87,13 @@ public class OrderQueryServiceImpl implements OrderQueryService {
                 .address(address(o.address()))
                 .unitPrice(o.unitPrice())
                 .shippingFee(o.shippingFee())
+                .originalShippingFee(o.originalShippingAmount())
+                .membershipShippingDiscount(o.shippingDiscountAmount())
+                .effectiveShippingFee(o.chargedShippingAmount())
+                .itemsAmount(o.itemsAmount())
+                .couponIssueId(o.couponIssueId())
+                .couponDiscount(o.couponDiscount())
+                .couponState(o.couponState())
                 .totalAmount(o.totalAmount())
                 .dispatchBusinessDays(o.dispatchBusinessDays())
                 .expiresAt(o.expiresAt())
@@ -187,7 +194,8 @@ public class OrderQueryServiceImpl implements OrderQueryService {
                 orders.findBySellerIdAndStateAndDelivery(
                         seller, OrderState.CONFIRMED, DeliveryState.DELIVERED)) {
             var o = mapper.readValue(row.snapshot, OrderSnapshot.class);
-            long amount = Math.max(0, nz(o.totalAmount()) - nz(o.shippingFee()));
+            // 플랫폼 지원 배송비를 차감하지 않고 실제 청구 배송비만 제외합니다.
+            long amount = o.merchandiseAmount();
             var at = o.purchaseConfirmedAt();
             if (at == null) {
                 awaitingOrders++;

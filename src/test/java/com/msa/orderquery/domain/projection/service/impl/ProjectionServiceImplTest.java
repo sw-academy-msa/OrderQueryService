@@ -42,6 +42,30 @@ class ProjectionServiceImplTest extends QueryDatabaseTestSupport {
     }
 
     @Test
+    void acceptsMembershipShippingAndRejectsDiscountAboveOriginalWithoutSavingReceipt() {
+        UUID id = UUID.randomUUID();
+        var event = (tools.jackson.databind.node.ObjectNode) mapper.valueToTree(order(id, 1));
+        var snapshot = (tools.jackson.databind.node.ObjectNode) event.path("order");
+        snapshot.put("shippingFee", 3000L);
+        snapshot.put("originalShippingFee", 3000L);
+        snapshot.put("membershipShippingDiscount", 3001L);
+        snapshot.put("effectiveShippingFee", 0L);
+        assertThatThrownBy(
+                        () ->
+                                service.apply(
+                                        ORDER_TOPIC,
+                                        id.toString(),
+                                        mapper.writeValueAsBytes(event)))
+                .isInstanceOf(InvalidProjectionEventException.class);
+        assertThat(receipts.count()).isZero();
+        snapshot.put("membershipShippingDiscount", 3000L);
+        service.apply(ORDER_TOPIC, id.toString(), mapper.writeValueAsBytes(event));
+        assertThat(receipts.count()).isEqualTo(1);
+        assertThat(orders.findById(id).orElseThrow().snapshot)
+                .contains("membershipShippingDiscount");
+    }
+
+    @Test
     void duplicatesAndOlderInitialSnapshotCannotOverwriteNewest() {
         UUID id = UUID.randomUUID();
         var newest = order(id, 3);

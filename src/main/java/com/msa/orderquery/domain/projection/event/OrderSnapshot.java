@@ -36,9 +36,77 @@ public record OrderSnapshot(
         // null이면 직렬화에서 빼서, 이 필드가 생기기 전 이벤트를 다시 받아도 중복 판정 해시가 예전과 같다
         @com.fasterxml.jackson.annotation.JsonInclude(
                         com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
-                Instant purchaseConfirmedAt) {
+                Instant purchaseConfirmedAt,
+        @com.fasterxml.jackson.annotation.JsonInclude(
+                        com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+                @PositiveOrZero
+                Long originalShippingFee,
+        @com.fasterxml.jackson.annotation.JsonInclude(
+                        com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+                @PositiveOrZero
+                Long membershipShippingDiscount,
+        @com.fasterxml.jackson.annotation.JsonInclude(
+                        com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+                @PositiveOrZero
+                Long effectiveShippingFee,
+        @com.fasterxml.jackson.annotation.JsonInclude(
+                        com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+                @PositiveOrZero
+                Long itemsAmount,
+        @com.fasterxml.jackson.annotation.JsonInclude(
+                        com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+                UUID couponIssueId,
+        @com.fasterxml.jackson.annotation.JsonInclude(
+                        com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+                @PositiveOrZero
+                Long couponDiscount,
+        @com.fasterxml.jackson.annotation.JsonInclude(
+                        com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+                String couponState) {
     public OrderSnapshot {
         if (items != null) items = List.copyOf(items);
+    }
+
+    /** 과거 이벤트는 배송비 원본만 있으며 새 필드의 null은 해시에 추가하지 않습니다. */
+    public long originalShippingAmount() {
+        return originalShippingFee == null
+                ? (shippingFee == null ? 0 : shippingFee)
+                : originalShippingFee;
+    }
+
+    public long shippingDiscountAmount() {
+        return membershipShippingDiscount == null ? 0 : membershipShippingDiscount;
+    }
+
+    public long chargedShippingAmount() {
+        return Math.subtractExact(originalShippingAmount(), shippingDiscountAmount());
+    }
+
+    /** 플랫폼 배송비 지원을 상품 매출에서 차감하지 않습니다. */
+    public long merchandiseAmount() {
+        // 쿠폰은 플랫폼 부담이므로 판매자 정산은 할인 전 상품 금액을 우선합니다.
+        if (itemsAmount != null) return itemsAmount;
+        return Math.max(
+                0,
+                Math.subtractExact(totalAmount == null ? 0 : totalAmount, chargedShippingAmount()));
+    }
+
+    @AssertTrue
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public boolean isMembershipShippingValid() {
+        if (originalShippingFee == null
+                && membershipShippingDiscount == null
+                && effectiveShippingFee == null) return true;
+        return originalShippingFee != null
+                && membershipShippingDiscount != null
+                && effectiveShippingFee != null
+                && shippingFee != null
+                && originalShippingFee.equals(shippingFee)
+                && originalShippingFee >= 0
+                && membershipShippingDiscount >= 0
+                && membershipShippingDiscount <= originalShippingFee
+                && effectiveShippingFee == originalShippingFee - membershipShippingDiscount
+                && (totalAmount == null || totalAmount >= effectiveShippingFee);
     }
 
     public static class OrderSnapshotBuilder {

@@ -24,6 +24,10 @@ class SellerSettlementTest {
             new OrderQueryServiceImpl(orders, mock(InquiryProjectionRepository.class), json);
 
     private OrderProjection row(Instant purchaseConfirmedAt) {
+        return row(purchaseConfirmedAt, null);
+    }
+
+    private OrderProjection row(Instant purchaseConfirmedAt, Long discount) {
         var id = UUID.randomUUID();
         var base = ProjectionFixtures.order(id, 1).order();
         var snapshot =
@@ -38,7 +42,10 @@ class SellerSettlementTest {
                         .delivery(DeliveryState.DELIVERED)
                         .unitPrice(1000L)
                         .shippingFee(3000L)
-                        .totalAmount(5000L)
+                        .totalAmount(5000L - (discount == null ? 0 : discount))
+                        .originalShippingFee(discount == null ? null : 3000L)
+                        .membershipShippingDiscount(discount)
+                        .effectiveShippingFee(discount == null ? null : 3000L - discount)
                         .createdAt(base.createdAt())
                         .purchaseConfirmedAt(purchaseConfirmedAt)
                         .build();
@@ -50,8 +57,46 @@ class SellerSettlementTest {
     @Test
     void snapshotWithoutPurchaseConfirmationSerializesLikeBeforeTheField() {
         // 이 필드가 생기기 전 이벤트를 다시 받아도 중복 판정 해시가 같아야 한다
-        var json = this.json.writeValueAsString(ProjectionFixtures.order(UUID.randomUUID(), 1).order());
-        assertThat(json).doesNotContain("purchaseConfirmedAt");
+        var json =
+                this.json.writeValueAsString(
+                        ProjectionFixtures.order(UUID.randomUUID(), 1).order());
+        assertThat(json)
+                .doesNotContain(
+                        "purchaseConfirmedAt",
+                        "originalShippingFee",
+                        "membershipShippingDiscount",
+                        "effectiveShippingFee",
+                        "membershipShippingValid");
+    }
+
+    @Test
+    void couponAndMembershipCostsNeverReduceSellerSettlement() {
+        var snapshot =
+                OrderSnapshot.builder()
+                        .itemsAmount(30000L)
+                        .couponDiscount(3000L)
+                        .shippingFee(3000L)
+                        .originalShippingFee(3000L)
+                        .membershipShippingDiscount(3000L)
+                        .effectiveShippingFee(0L)
+                        .totalAmount(27000L)
+                        .build();
+        assertThat(snapshot.merchandiseAmount()).isEqualTo(30000L);
+        assertThat(json.writeValueAsString(snapshot)).contains("couponDiscount", "itemsAmount");
+    }
+
+    @Test
+    void freeShippingDoesNotReduceSellerMerchandiseSettlement() {
+        when(orders.findBySellerIdAndStateAndDelivery(
+                        ProjectionFixtures.SELLER, OrderState.CONFIRMED, DeliveryState.DELIVERED))
+                .thenReturn(
+                        List.of(
+                                row(Instant.parse("2026-11-10T00:00:00Z"), 3000L),
+                                row(Instant.parse("2026-11-11T00:00:00Z"), 1500L),
+                                row(null, 3000L)));
+        var result = service.settlement(ProjectionFixtures.SELLER, YearMonth.of(2026, 11));
+        assertThat(result.confirmedAmount()).isEqualTo(4000);
+        assertThat(result.awaitingAmount()).isEqualTo(2000);
     }
 
     @Test
@@ -72,10 +117,13 @@ class SellerSettlementTest {
         assertThat(r.confirmedAmount()).isEqualTo(4000);
         assertThat(r.awaitingOrders()).isEqualTo(1);
         assertThat(r.awaitingAmount()).isEqualTo(2000);
-        assertThat(r.products()).singleElement().satisfies(p -> {
-            assertThat(p.orders()).isEqualTo(2);
-            assertThat(p.quantity()).isEqualTo(4);
-            assertThat(p.amount()).isEqualTo(4000);
-        });
+        assertThat(r.products())
+                .singleElement()
+                .satisfies(
+                        p -> {
+                            assertThat(p.orders()).isEqualTo(2);
+                            assertThat(p.quantity()).isEqualTo(4);
+                            assertThat(p.amount()).isEqualTo(4000);
+                        });
     }
 }
