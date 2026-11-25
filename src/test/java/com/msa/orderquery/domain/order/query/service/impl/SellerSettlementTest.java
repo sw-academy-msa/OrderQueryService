@@ -70,6 +70,22 @@ class SellerSettlementTest {
     }
 
     @Test
+    void couponAndMembershipCostsNeverReduceSellerSettlement() {
+        var snapshot =
+                OrderSnapshot.builder()
+                        .itemsAmount(30000L)
+                        .couponDiscount(3000L)
+                        .shippingFee(3000L)
+                        .originalShippingFee(3000L)
+                        .membershipShippingDiscount(3000L)
+                        .effectiveShippingFee(0L)
+                        .totalAmount(27000L)
+                        .build();
+        assertThat(snapshot.merchandiseAmount()).isEqualTo(30000L);
+        assertThat(json.writeValueAsString(snapshot)).contains("couponDiscount", "itemsAmount");
+    }
+
+    @Test
     void freeShippingDoesNotReduceSellerMerchandiseSettlement() {
         when(orders.findBySellerIdAndStateAndDelivery(
                         ProjectionFixtures.SELLER, OrderState.CONFIRMED, DeliveryState.DELIVERED))
