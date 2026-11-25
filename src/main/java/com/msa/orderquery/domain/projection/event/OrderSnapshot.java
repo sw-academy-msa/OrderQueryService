@@ -48,7 +48,21 @@ public record OrderSnapshot(
         @com.fasterxml.jackson.annotation.JsonInclude(
                         com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
                 @PositiveOrZero
-                Long effectiveShippingFee) {
+                Long effectiveShippingFee,
+        @com.fasterxml.jackson.annotation.JsonInclude(
+                        com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+                @PositiveOrZero
+                Long itemsAmount,
+        @com.fasterxml.jackson.annotation.JsonInclude(
+                        com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+                UUID couponIssueId,
+        @com.fasterxml.jackson.annotation.JsonInclude(
+                        com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+                @PositiveOrZero
+                Long couponDiscount,
+        @com.fasterxml.jackson.annotation.JsonInclude(
+                        com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+                String couponState) {
     public OrderSnapshot {
         if (items != null) items = List.copyOf(items);
     }
@@ -70,6 +84,8 @@ public record OrderSnapshot(
 
     /** 플랫폼 배송비 지원을 상품 매출에서 차감하지 않습니다. */
     public long merchandiseAmount() {
+        // 쿠폰은 플랫폼 부담이므로 판매자 정산은 할인 전 상품 금액을 우선합니다.
+        if (itemsAmount != null) return itemsAmount;
         return Math.max(
                 0,
                 Math.subtractExact(totalAmount == null ? 0 : totalAmount, chargedShippingAmount()));
