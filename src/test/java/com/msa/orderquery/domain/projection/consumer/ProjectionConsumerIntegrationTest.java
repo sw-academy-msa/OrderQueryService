@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
 
 import com.msa.orderquery.domain.projection.event.OrderState;
+import com.msa.orderquery.domain.projection.exception.InvalidProjectionEventException;
 import com.msa.orderquery.domain.projection.repository.*;
 import com.msa.orderquery.global.config.database.QueryDatabaseTestSupport;
 
@@ -143,11 +144,28 @@ class ProjectionConsumerIntegrationTest extends QueryDatabaseTestSupport {
                                 for (var record : consumer.poll(Duration.ofMillis(500)))
                                     if (record.key().equals(id.toString())) {
                                         assertThat(record.value()).isEqualTo(invalid);
+                                        // 원문 없이 예외 클래스와 사유 코드만 헤더에 남깁니다.
                                         assertThat(
-                                                        record.headers()
-                                                                .lastHeader(
-                                                                        "kafka_dlt-exception-message"))
-                                                .isNull();
+                                                        new String(
+                                                                record.headers()
+                                                                        .lastHeader(
+                                                                                "kafka_dlt-exception-message")
+                                                                        .value(),
+                                                                java.nio.charset.StandardCharsets
+                                                                        .UTF_8))
+                                                .contains("reason=UNREADABLE:")
+                                                .doesNotContain("synthetic-only");
+                                        assertThat(
+                                                        new String(
+                                                                record.headers()
+                                                                        .lastHeader(
+                                                                                "kafka_dlt-exception-fqcn")
+                                                                        .value(),
+                                                                java.nio.charset.StandardCharsets
+                                                                        .UTF_8))
+                                                .isEqualTo(
+                                                        InvalidProjectionEventException.class
+                                                                .getName());
                                         assertThat(
                                                         record.headers()
                                                                 .lastHeader(

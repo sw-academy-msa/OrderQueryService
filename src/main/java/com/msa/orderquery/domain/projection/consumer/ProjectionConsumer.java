@@ -1,5 +1,6 @@
 package com.msa.orderquery.domain.projection.consumer;
 
+import com.msa.orderquery.domain.projection.exception.*;
 import com.msa.orderquery.domain.projection.service.ProjectionService;
 
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -22,6 +23,13 @@ public class ProjectionConsumer {
             idIsGroup = false,
             topics = {"${query.events.order-topic}", "${query.events.inquiry-topic}"})
     public void consume(ConsumerRecord<String, byte[]> record) {
-        service.apply(record.topic(), record.key(), record.value());
+        try {
+            service.apply(record.topic(), record.key(), record.value());
+        } catch (InvalidProjectionEventException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            // 오류 처리기 로그에 SQL 원문이 남지 않도록 클래스 이름만 전달하고 재시도합니다.
+            throw new ProjectionRetryException(exception);
+        }
     }
 }
