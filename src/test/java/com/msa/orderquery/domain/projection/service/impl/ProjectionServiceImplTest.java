@@ -152,6 +152,13 @@ class ProjectionServiceImplTest extends QueryDatabaseTestSupport {
         assertThat(row.state).isEqualTo(OrderState.HELD);
         assertThat(row.sourceVersion).isEqualTo(2);
         assertThat(receipts.count()).isEqualTo(5);
+        // 같은 내용이 더 늦게 다시 오면 발생 시각만 당겨, 그보다 이른 다른 내용이 덮어쓰지 못합니다.
+        UUID other = UUID.randomUUID();
+        var held = commandSnapshot(other, "HELD", true);
+        commandEvent(other, 1, NOW.plusSeconds(1), held);
+        commandEvent(other, 1, NOW.plusSeconds(3), held);
+        commandEvent(other, 1, NOW.plusSeconds(2), commandSnapshot(other, "FAILED", false));
+        assertThat(orders.findById(other).orElseThrow().state).isEqualTo(OrderState.HELD);
     }
 
     /** OrderJournalImpl처럼 null 필드를 그대로 포함한 Map 스냅샷입니다. */

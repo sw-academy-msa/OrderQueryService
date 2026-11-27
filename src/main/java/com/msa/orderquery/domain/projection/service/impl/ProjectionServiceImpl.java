@@ -179,6 +179,11 @@ public class ProjectionServiceImpl implements ProjectionService {
             invalid("SELLER_CHANGED");
         var decision = decide(event, row.sourceVersion, row.sourceOccurredAt, hash, row.payloadHash);
         if (decision != Decision.APPLY) {
+            if (decision == Decision.DUPLICATE && later(event.occurredAt(), row.sourceOccurredAt)) {
+                // 같은 내용이 더 늦게 다시 발행되면 발생 시각만 당겨 이후 같은 버전 판정이 도착 순서에 흔들리지 않게 합니다.
+                row.sourceOccurredAt = event.occurredAt();
+                orders.save(row);
+            }
             skipped(event, decision, row.sourceVersion);
             return;
         }
@@ -213,6 +218,11 @@ public class ProjectionServiceImpl implements ProjectionService {
                         || !row.sellerId.equals(i.sellerId()))) invalid("OWNER_CHANGED");
         var decision = decide(event, row.sourceVersion, row.sourceOccurredAt, hash, row.payloadHash);
         if (decision != Decision.APPLY) {
+            if (decision == Decision.DUPLICATE && later(event.occurredAt(), row.sourceOccurredAt)) {
+                // 같은 내용이 더 늦게 다시 발행되면 발생 시각만 당겨 이후 같은 버전 판정이 도착 순서에 흔들리지 않게 합니다.
+                row.sourceOccurredAt = event.occurredAt();
+                inquiries.save(row);
+            }
             skipped(event, decision, row.sourceVersion);
             return;
         }
@@ -237,12 +247,13 @@ public class ProjectionServiceImpl implements ProjectionService {
         if (event.aggregateVersion() > current) return Decision.APPLY;
         if (event.aggregateVersion() < current) return Decision.STALE;
         if (Objects.equals(hash, oldHash)) return Decision.DUPLICATE;
-        if (currentOccurredAt != null
-                && event.occurredAt()
-                        .truncatedTo(ChronoUnit.MICROS)
-                        .isAfter(currentOccurredAt.truncatedTo(ChronoUnit.MICROS)))
-            return Decision.APPLY;
-        return Decision.STALE;
+        return later(event.occurredAt(), currentOccurredAt) ? Decision.APPLY : Decision.STALE;
+    }
+
+    private static boolean later(Instant incoming, Instant current) {
+        return current != null
+                && incoming.truncatedTo(ChronoUnit.MICROS)
+                        .isAfter(current.truncatedTo(ChronoUnit.MICROS));
     }
 
     private void skipped(ProjectionEvent event, Decision decision, long current) {

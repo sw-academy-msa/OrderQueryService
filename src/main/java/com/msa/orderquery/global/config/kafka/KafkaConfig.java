@@ -31,13 +31,12 @@ public class KafkaConfig {
                         template,
                         (record, exception) -> {
                             var cause = invalidCause(exception);
-                            // 원인을 남기되 원문 JSON은 출력하지 않습니다. key는 주문/문의 ID입니다.
+                            // 원인을 남기되 원문 JSON과 검증 전 key는 출력하지 않고 위치로 레코드를 추적합니다.
                             log.warn(
-                                    "주문 조회 이벤트 DLT 전송: topic={}, partition={}, offset={}, key={}, exception={}, reason={}",
+                                    "주문 조회 이벤트 DLT 전송: topic={}, partition={}, offset={}, exception={}, reason={}",
                                     record.topic(),
                                     record.partition(),
                                     record.offset(),
-                                    record.key(),
                                     cause == null
                                             ? exception.getClass().getName()
                                             : cause.getClass().getName(),
