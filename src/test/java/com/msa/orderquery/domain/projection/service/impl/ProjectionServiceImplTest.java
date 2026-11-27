@@ -111,11 +111,114 @@ class ProjectionServiceImplTest extends QueryDatabaseTestSupport {
                         .occurredAt(differentVersion.occurredAt())
                         .order(differentVersion.order())
                         .build();
-        assertThatThrownBy(() -> apply(reused)).isInstanceOf(InvalidProjectionEventException.class);
-        assertThatThrownBy(() -> apply(order(id, 1, BUYER, SELLER, OrderState.HELD)))
-                .isInstanceOf(InvalidProjectionEventException.class);
+        assertThatThrownBy(() -> apply(reused))
+                .isInstanceOf(InvalidProjectionEventException.class)
+                .hasMessageContaining("reason=EVENT_ID_REUSED");
+        // 같은 버전의 다른 내용이라도 더 늦게 발생하지 않았다면 DLT가 아니라 건너뜁니다.
+        apply(order(id, 1, BUYER, SELLER, OrderState.HELD));
         assertThat(orders.findById(id).orElseThrow().state).isEqualTo(OrderState.CONFIRMED);
-        assertThat(receipts.count()).isEqualTo(1);
+        assertThat(receipts.count()).isEqualTo(2);
+    }
+
+    /** 운영 DLT 재현: Command가 생성 이벤트(RESERVING)와 재고 확보 실패(FAILED)를 같은 버전 1로 발행합니다. */
+    @Test
+    void reservationFailureWithSameVersionAsCreationIsAppliedNotDeadLettered() {
+        UUID id = UUID.randomUUID();
+        commandEvent(id, 1, NOW.plusNanos(612400000), commandSnapshot(id, "RESERVING", false));
+        commandEvent(id, 1, NOW.plusNanos(681955000), commandSnapshot(id, "FAILED", false));
+        var row = orders.findById(id).orElseThrow();
+        assertThat(row.state).isEqualTo(OrderState.FAILED);
+        assertThat(row.totalAmount).isNull();
+        assertThat(row.sellerId).isNull();
+        assertThat(receipts.count()).isEqualTo(2);
+    }
+
+    /** 운영 DLT 재현: 생성 이벤트와 같은 버전 1의 HELD(회원 배송비와 쿠폰 금액 포함)가 최신 상태로 반영됩니다. */
+    @Test
+    void heldWithSameVersionAsCreationIsAppliedAndLateCreationIsSkipped() {
+        UUID id = UUID.randomUUID();
+        var created = commandSnapshot(id, "RESERVING", false);
+        commandEvent(id, 1, NOW.plusNanos(36895000), created);
+        commandEvent(id, 1, NOW.plusNanos(381624000), commandSnapshot(id, "HELD", true));
+        var row = orders.findById(id).orElseThrow();
+        assertThat(row.state).isEqualTo(OrderState.HELD);
+        assertThat(row.sellerId).isEqualTo(SELLER);
+        assertThat(row.totalAmount).isEqualTo(4000L);
+        // 다른 복제본이 늦게 전송한 생성 이벤트와 오래된 버전은 최신 모델을 덮어쓰지 않습니다.
+        commandEvent(id, 1, NOW.plusNanos(36895000), created);
+        commandEvent(id, 2, NOW.plusSeconds(5), commandSnapshot(id, "HELD", true));
+        commandEvent(id, 1, NOW.plusNanos(381624000), commandSnapshot(id, "HELD", true));
+        row = orders.findById(id).orElseThrow();
+        assertThat(row.state).isEqualTo(OrderState.HELD);
+        assertThat(row.sourceVersion).isEqualTo(2);
+        assertThat(receipts.count()).isEqualTo(5);
+        // 같은 내용이 더 늦게 다시 오면 발생 시각만 당겨, 그보다 이른 다른 내용이 덮어쓰지 못합니다.
+        UUID other = UUID.randomUUID();
+        var held = commandSnapshot(other, "HELD", true);
+        commandEvent(other, 1, NOW.plusSeconds(1), held);
+        commandEvent(other, 1, NOW.plusSeconds(3), held);
+        commandEvent(other, 1, NOW.plusSeconds(2), commandSnapshot(other, "FAILED", false));
+        assertThat(orders.findById(other).orElseThrow().state).isEqualTo(OrderState.HELD);
+    }
+
+    /** OrderJournalImpl처럼 null 필드를 그대로 포함한 Map 스냅샷입니다. */
+    Map<String, Object> commandSnapshot(UUID id, String state, boolean reserved) {
+        var s = new LinkedHashMap<String, Object>();
+        s.put("orderId", id);
+        s.put("buyerId", BUYER);
+        s.put("sellerId", reserved ? SELLER : null);
+        s.put("productId", PRODUCT);
+        s.put("productName", reserved ? "합성 주문 상품" : null);
+        s.put("brandOrStore", reserved ? "합성 판매처" : null);
+        var item = new LinkedHashMap<String, Object>();
+        item.put("optionId", OPTION);
+        item.put("quantity", 1);
+        item.put("label", reserved ? "기본 옵션" : null);
+        s.put("items", List.of(item));
+        s.put("state", state);
+        s.put("delivery", null);
+        var address = new LinkedHashMap<String, Object>();
+        address.put("recipientName", "합성 수령인");
+        address.put("recipientPhone", "synthetic-phone");
+        address.put("postalCode", "00000");
+        address.put("roadAddress", "합성 도로");
+        address.put("detailAddress", "테스트 전용");
+        address.put("deliveryMemo", null);
+        s.put("address", address);
+        s.put("unitPrice", reserved ? 1000L : null);
+        s.put("shippingFee", reserved ? 3000L : null);
+        if (reserved) {
+            s.put("originalShippingFee", 3000L);
+            s.put("membershipShippingDiscount", 0L);
+            s.put("effectiveShippingFee", 3000L);
+            s.put("itemsAmount", 1000L);
+            s.put("couponIssueId", null);
+            s.put("couponDiscount", 0L);
+            s.put("couponState", "NONE");
+        }
+        s.put("totalAmount", reserved ? 4000L : null);
+        s.put("dispatchBusinessDays", reserved ? 2 : null);
+        s.put("expiresAt", reserved ? NOW.plusSeconds(600) : null);
+        s.put("createdAt", NOW);
+        s.put("confirmedAt", null);
+        s.put("carrier", null);
+        s.put("trackingNumber", null);
+        s.put("shippedAt", null);
+        s.put("deliveredAt", null);
+        s.put("purchaseConfirmedAt", null);
+        return s;
+    }
+
+    void commandEvent(UUID id, long version, java.time.Instant occurredAt, Map<String, Object> s) {
+        var event = new LinkedHashMap<String, Object>();
+        event.put("eventId", UUID.randomUUID());
+        event.put("schemaVersion", 1);
+        event.put("type", "ORDER_UPSERT");
+        event.put("aggregateId", id);
+        event.put("aggregateVersion", version);
+        event.put("occurredAt", occurredAt);
+        event.put("order", s);
+        service.apply(ORDER_TOPIC, id.toString(), mapper.writeValueAsBytes(event));
     }
 
     @Test
@@ -185,6 +288,25 @@ class ProjectionServiceImplTest extends QueryDatabaseTestSupport {
                 .isInstanceOf(InvalidProjectionEventException.class)
                 .hasMessageNotContaining("synthetic-sensitive-value")
                 .hasCause(null);
+        assertThat(receipts.count()).isZero();
+        UUID id = UUID.randomUUID();
+        var event = (tools.jackson.databind.node.ObjectNode) mapper.valueToTree(order(id, 1));
+        ((tools.jackson.databind.node.ObjectNode) event.path("order"))
+                .put("futureField", "synthetic-sensitive-value");
+        assertThatThrownBy(
+                        () ->
+                                service.apply(
+                                        ORDER_TOPIC, id.toString(), mapper.writeValueAsBytes(event)))
+                .isInstanceOf(InvalidProjectionEventException.class)
+                .hasMessageContaining("reason=UNKNOWN_FIELD:order.futureField")
+                .hasMessageNotContaining("synthetic-sensitive-value");
+        ((tools.jackson.databind.node.ObjectNode) event.path("order")).remove("futureField");
+        ((tools.jackson.databind.node.ObjectNode) event.path("order")).put("shippingFee", -1);
+        assertThatThrownBy(
+                        () ->
+                                service.apply(
+                                        ORDER_TOPIC, id.toString(), mapper.writeValueAsBytes(event)))
+                .hasMessageContaining("reason=CONSTRAINT:order.shippingFee");
         assertThat(receipts.count()).isZero();
     }
 }
